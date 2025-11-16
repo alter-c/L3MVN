@@ -1,10 +1,10 @@
 # L3MVN: Leveraging Large Language Models for Visual Target Navigation
 
-This work is based on our paper. We proposed a new framework to explore and search for the target in unknown environment based on Large Language Model. Our work is based on [SemExp](https://github.com/devendrachaplot/Object-Goal-Navigation) and [llm_scene_understanding](https://github.com/neurips2020submission/invalid-action-masking), implemented in PyTorch.
+This work is based on [L3MVN](https://github.com/ybgdgh/L3MVN).
 
-**Author:** Bangguo Yu, Hamidreza Kasaei and Ming Cao
+**Author:** Dongxu Chen
 
-**Affiliation:** University of Groningen
+**Affiliation:** BAAI
 
 ## Frontier Semantic Exploration Framework
 
@@ -14,87 +14,123 @@ Visual target navigation in unknown environments is a crucial problem in robotic
 
 <!-- ## Requirements
 
-- Ubuntu 20.04
-- Python 3.7
+- Ubuntu 22.04
+- Python 3.8
 - [habitat-lab](https://github.com/facebookresearch/habitat-lab) -->
 
 ## Installation
 
-The code has been tested only with Python 3.7 on Ubuntu 20.04.
+The code has been tested with Python 3.8 on Ubuntu 22.04 with Nvidia 3090.
+#### 1. Prepare Environment
+- Install this repo and create conda environment:
+    ```
+    git clone https://github.com/alter-c/L3MVN.git
+    conda create -n l3mvn python=3.7 cmake=3.14.0 -y
+    ```
 
-1. Installing Dependencies
-- We use challenge-2022 versions of [habitat-sim](https://github.com/facebookresearch/habitat-sim) and [habitat-lab](https://github.com/facebookresearch/habitat-lab) as specified below:
+#### 2. Installing Dependencies
+- We use specific versions of [habitat-sim](https://github.com/facebookresearch/habitat-sim) and [habitat-lab](https://github.com/facebookresearch/habitat-lab) as below:
 
-- Installing habitat-sim:
-```
-git clone https://github.com/facebookresearch/habitat-sim.git
-cd habitat-sim; git checkout tags/challenge-2022; 
-pip install -r requirements.txt; 
-python setup.py install --headless
-python setup.py install # (for Mac OS)
-```
+  - Install habitat-sim:
+    ```
+    conda install -n l3mvn \
+      habitat-sim=0.2.2 headless \
+      -c conda-forge -c aihabitat -y
+    ```
 
-- Installing habitat-lab:
-```
-git clone https://github.com/facebookresearch/habitat-lab.git
-cd habitat-lab; git checkout tags/challenge-2022; 
-pip install -e .
-```
+  - Install habitat-lab:
+    ```
+    cd L3MVN
+    git clone https://github.com/facebookresearch/habitat-lab.git
+    cd habitat-lab; git checkout tags/challenge-2022; 
+    pip install -e .
+    cd ..
+    ```
 
-- Install [pytorch](https://pytorch.org/) according to your system configuration. The code is tested on pytorch v1.7.0 and cudatoolkit v11.4. If you are using conda:
-```
-conda install pytorch==1.7.0 torchvision==0.8.1 cudatoolkit=11.4 #(Linux with GPU)
-conda install pytorch==1.7.0 torchvision==0.8.1 -c pytorch #(Mac OS)
-```
+- Install [pytorch](https://pytorch.org/) according to your system configuration. The code is tested on pytorch v1.8.0 and cudatoolkit v11.1. If you are using conda:
+    ```
+    conda install pytorch==1.8.0 torchvision==0.9.0 torchaudio==0.8.0 cudatoolkit=11.1 \
+      -c pytorch -c conda-forge
+    ```
 
 - Install [detectron2](https://github.com/facebookresearch/detectron2/) according to your system configuration. 
+    ```
+    python -m pip install detectron2 -f \
+      https://dl.fbaipublicfiles.com/detectron2/wheels/cu111/torch1.8/index.html
+    ```
 
-2. Download HM3D datasets:
+- Install other requirements.
+    ```
+    pip install -r requirements.txt
+    ```
 
-#### Habitat Matterport
-Download [HM3D](https://aihabitat.org/datasets/hm3d/) dataset using download utility and [instructions](https://github.com/facebookresearch/habitat-sim/blob/089f6a41474f5470ca10222197c23693eef3a001/datasets/HM3D.md):
-```
-python -m habitat_sim.utils.datasets_download --username <api-token-id> --password <api-token-secret> --uids hm3d_minival
-```
-
-3. Download additional datasets
-
-Download the [segmentation model](https://drive.google.com/file/d/1U0dS44DIPZ22nTjw0RfO431zV-lMPcvv/view?usp=share_link) in RedNet/model path.
-
-
-## Setup
-Clone the repository and install other requirements:
-```
-git clone https://github.com/ybgdgh/L3MVN
-cd L3MVN/
-pip install -r requirements.txt
-```
-
-### Setting up datasets
-The code requires the datasets in a `data` folder in the following format (same as habitat-lab):
-```
-L3MVN/
-  data/
-    scene_datasets/
-    matterport_category_mappings.tsv
-    object_norm_inv_perplexity.npy
-    versioned_data
-    objectgoal_hm3d/
-        train/
-        val/
-        val_mini/
-```
+#### 3. Installing Other 
+- Download the [segmentation model](https://drive.google.com/file/d/1U0dS44DIPZ22nTjw0RfO431zV-lMPcvv/view?usp=share_link) in RedNet/model path. We download it locally and upload it with scp.
+    ```
+    scp -P 22 <path_to_pth>\rednet_semmap_mp3d_40.pth \
+      user@hostname:<path_to_L3MVN>/L3MVN/RedNet/model
+    ```
 
 
-### For evaluation: 
-For evaluating the pre-trained model:
-```
-python main_llm_vis.py --split val --eval 1 --auto_gpu_config 0 \
--n 1 --num_eval_episodes 2000 --load pretrained_models/llm_model.pt \
---use_gtsem 0 --num_local_steps 10
-```
+## Download Datasets
+#### 1. Set Matterport Variables
+- Create Matterport account and Set following variables.
+    ```
+    export TOKEN_ID=<FILL IN FROM YOUR ACCOUNT INFO IN MATTERPORT>
+    export TOKEN_SECRET=<FILL IN FROM YOUR ACCOUNT INFO IN MATTERPORT>
+    export DATA_DIR=</path/to/L3MVN/data>
+    ```
+
+#### 2. Download HM3D datasets
+
+- Download [HM3D](https://aihabitat.org/datasets/hm3d/) dataset using download utility and [instructions](https://github.com/facebookresearch/habitat-sim/blob/089f6a41474f5470ca10222197c23693eef3a001/datasets/HM3D.md):
+    ```
+    python -m habitat_sim.utils.datasets_download \
+      --username $TOKEN_ID \
+      --password $TOKEN_SECRET \
+      --uids hm3d_minival \
+      --data-path $DATA_DIR &&
+    python -m habitat_sim.utils.datasets_download \
+      --username $TOKEN_ID \
+      --password $TOKEN_SECRET \
+      --uids hm3d_val \
+      --data-path $DATA_DIR
+    ```
+
+#### 3. Download Objectnav_HM3D datasets
+- Download [Objectnav_HM3D](https://github.com/facebookresearch/habitat-lab/blob/main/DATASETS.md):
+    ```
+    cd data && mkdir objectgoal_hm3d && cd objectgoal_hm3d
+    wget "https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/hm3d/v1/objectnav_hm3d_v1.zip"
+    unzip objectnav_hm3d_v1.zip
+    mv objectnav_hm3d_v1/* ./
+    ```
 
 
-## Demo Video
 
-[video](https://sites.google.com/view/l3mvn)
+#### 4. Datasets folder structure
+- The code requires the datasets in a `data` folder in the following format (same as habitat-lab):
+    ```
+    L3MVN/
+      data/
+        matterport_category_mappings.tsv
+        object_norm_inv_perplexity.npy
+        versioned_data
+        scene_datasets/
+            val/
+            val_mini/
+        objectgoal_hm3d/
+            train/
+            val/
+            val_mini/
+    ```
+
+
+## Evaluation: 
+- For evaluating the pre-trained model:
+  ```
+  python main_llm_vis.py --split val --eval 1 --auto_gpu_config 0 \
+  -n 1 --num_eval_episodes 10 --load pretrained_models/llm_model.pt \
+  --use_gtsem 0 --num_local_steps 10
+  ```
+
