@@ -1,0 +1,11 @@
+tmp/
+__pycache__/
+
+objectgoal_hm3d/
+scene_datasets/
+versioned_data/
+habitat-lab/
+
+
+*.pyc
+*.pth
