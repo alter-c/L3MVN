@@ -6,6 +6,7 @@ scene_datasets/
 versioned_data/
 habitat-lab/
 
+images/
 
 *.pyc
 *.pth

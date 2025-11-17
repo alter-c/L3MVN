@@ -64,6 +64,9 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
         self.last_action = None
         self.count_forward_actions = None
 
+        # add high-resolution rgb observation for data collection
+        self.raw_rgb = None
+
         self.replan_count = 0
         self.collision_n = 0
         self.kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(3, 3))
@@ -171,6 +174,9 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             # act
             action = {'action': action}
             obs, rew, done, info = super().step(action)
+
+            # collect raw rgb
+            self.raw_rgb = obs[:3, :, :]
 
             if done and self.info['success'] == 0:
                 if self.info['time'] >= self.args.max_episode_length - 1:
@@ -550,5 +556,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
                 dump_dir, self.rank, self.episode_no,
                 self.rank, self.episode_no, self.timestep)
             cv2.imwrite(fn, self.vis_image)
+
+    def get_raw_rgb(self):
+        return self.raw_rgb
 
 

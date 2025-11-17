@@ -55,6 +55,11 @@ class VecPyTorch():
         obs = torch.from_numpy(obs).float().to(self.device)
         # reward = torch.from_numpy(reward).float()
         return obs, reward, done, info
+    
+    def get_raw_rgb(self):
+        raw_rgb = self.venv.get_raw_rgb()
+        raw_rgb = torch.from_numpy(raw_rgb).float().to(self.device)
+        return raw_rgb
 
     def close(self):
         return self.venv.close()

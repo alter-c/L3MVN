@@ -59,14 +59,15 @@ def get_args():
                         help='1: save visualization as images')
 
     # Environment, dataset and episode specifications
-    parser.add_argument('-efw', '--env_frame_width', type=int, default=640,
-                        help='Frame width (default:640)')
-    parser.add_argument('-efh', '--env_frame_height', type=int, default=480,
-                        help='Frame height (default:480)')
+    parser.add_argument('-efw', '--env_frame_width', type=int, default=960,
+                        help='Frame width (default:960)')
+    parser.add_argument('-efh', '--env_frame_height', type=int, default=720,
+                        help='Frame height (default:720)')
     parser.add_argument('-fw', '--frame_width', type=int, default=160,
                         help='Frame width (default:160)')
     parser.add_argument('-fh', '--frame_height', type=int, default=120,
                         help='Frame height (default:120)')
+    # change frame size
     parser.add_argument('-el', '--max_episode_length', type=int, default=500,
                         help="""Maximum episode length""")
     parser.add_argument("--task_config", type=str,

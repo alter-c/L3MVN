@@ -54,6 +54,8 @@ COUNT_EPISODES_COMMAND = "count_episodes"
 EPISODE_OVER = "episode_over"
 GET_METRICS = "get_metrics"
 
+GET_RAW_RGB = "get_raw_rgb"
+
 
 def _make_env_fn(
     config: Config, dataset: Optional[habitat.Dataset] = None, rank: int = 0
@@ -231,6 +233,10 @@ class VectorEnv:
                     if auto_reset_done and done:
                         observations, info = env.reset()
                     connection_write_fn((observations, reward, done, info))
+                
+                elif command == GET_RAW_RGB:
+                    raw_rgb = env.get_raw_rgb()
+                    connection_write_fn(raw_rgb)
 
                 elif command == COUNT_EPISODES_COMMAND:
                     connection_write_fn(len(env.episodes))
@@ -537,6 +543,16 @@ class VectorEnv:
         obs, rews, dones, infos = zip(*results)
         self._is_waiting = False
         return np.stack(obs), rews, np.stack(dones), infos
+    
+    def get_raw_rgb(self):
+        self._is_waiting = True
+        for write_fn in self._connection_write_fns:
+            write_fn((GET_RAW_RGB, None))
+        raw_rgbs = []
+        for read_fn in self._connection_read_fns:
+            raw_rgbs.append(read_fn())
+        self._is_waiting = False
+        return np.stack(raw_rgbs)
 
     def _assert_not_closed(self):
         assert not self._is_closed, "Trying to operate on a SubprocVecEnv after calling close()"

@@ -48,6 +48,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 fileName = 'data/matterport_category_mappings.tsv'
 
+img_dir = "images"
+os.makedirs(img_dir, exist_ok=True)
+
+
 text = ''
 lines = []
 items = []
@@ -136,6 +140,10 @@ def main():
 
     finished = np.zeros((args.num_processes))
     wait_env = np.zeros((args.num_processes))
+
+    episode_id = np.zeros(args.num_processes, dtype=int)    # episode id for each process
+    final_step_id = np.zeros(args.num_processes, dtype=int) # last episode's final step id for each process
+
 
     g_process_rewards = 0
     g_total_rewards = np.ones((num_scenes))
@@ -339,8 +347,8 @@ def main():
         # goal_map = 1 - goal_map
         planner.set_multi_goal(goal_pose_map)
 
-        img_label, num = measure.label(image, connectivity=2, return_num=True)#输出二值图像中所有的连通域
-        props = measure.regionprops(img_label)#输出连通域的属性，包括面积等
+        img_label, num = measure.label(image, connectivity=2, return_num=True) # 输出二值图像中所有的连通域
+        props = measure.regionprops(img_label) # 输出连通域的属性，包括面积等
         # print("img_label.shape: ", img_label.shape) # 480*480
         # print("img_label.dtype: ", img_label.dtype) # 480*480
         Goal_edge = np.zeros((img_label.shape[0], img_label.shape[1]))
@@ -593,6 +601,8 @@ def main():
                 dist = infos[e]['distance_to_goal']
                 spl_per_category[infos[e]['goal_name']].append(spl)
                 success_per_category[infos[e]['goal_name']].append(success)
+                episode_id[e] += 1
+                final_step_id[e] = step  # 记录上个episode的step数
                 if args.eval:
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
@@ -887,7 +897,32 @@ def main():
                                                 :].argmax(0).cpu().numpy()
    
 
-        obs, fail_case, done, infos = envs.plan_act_and_preprocess(planner_inputs)
+        obs, fail_case, done, infos = envs.plan_act_and_preprocess(planner_inputs) 
+        # print(obs.shape) # shape [bs, 20, 120, 160]
+
+        # ------------------------------------------------------------------
+
+        # ------------------------------------------------------------------
+        # Collect and save raw rgb images
+        num_save_steps = 10
+        if step % num_save_steps == 0:
+            raw_rgbs = envs.get_raw_rgb() 
+            # print(rgb.shape) # shape [bs, 3, 720, 960]
+            for e in range(num_scenes):
+                rgb_tensor = raw_rgbs[e]       
+                rgb = rgb_tensor[:3].cpu().numpy()              # [3, H, W]
+                rgb = rgb.transpose(1, 2, 0).astype(np.uint8)   # [H, W, 3]
+
+                
+                if episode_id[e] < num_episodes:
+                    # Calculate episode and step index
+                    e_id = num_episodes * e + episode_id[e]
+                    s_id = step - final_step_id[e]
+
+                    img_name = f"{img_dir}/{(e_id):03}_000_{s_id:03}.jpg"
+                    print(f"Saving image: {img_name}")
+                    cv2.imwrite(img_name, rgb[:, :, ::-1])
+
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
