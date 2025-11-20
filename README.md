@@ -15,12 +15,12 @@ Visual target navigation in unknown environments is a crucial problem in robotic
 <!-- ## Requirements
 
 - Ubuntu 22.04
-- Python 3.8
+- Python 3.7
 - [habitat-lab](https://github.com/facebookresearch/habitat-lab) -->
 
 ## Installation
 
-The code has been tested with Python 3.8 on Ubuntu 22.04 with Nvidia 3090.
+The code has been tested with Python 3.7 on Ubuntu 22.04 with Nvidia 3090.
 #### 1. Prepare Environment
 - Install this repo and create conda environment:
     ```
@@ -94,6 +94,14 @@ The code has been tested with Python 3.8 on Ubuntu 22.04 with Nvidia 3090.
       --username $TOKEN_ID \
       --password $TOKEN_SECRET \
       --uids hm3d_val \
+      --data-path $DATA_DIR
+    ```
+- If you want to collect large-scale data, download the train split:
+    ```
+    python -m habitat_sim.utils.datasets_download \
+      --username $TOKEN_ID \
+      --password $TOKEN_SECRET \
+      --uids hm3d_train \
       --data-path $DATA_DIR
     ```
 

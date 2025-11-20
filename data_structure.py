@@ -62,7 +62,7 @@ def create_episode_data(
                     # {
                     #   "x": 0.0,
                     #   "y": 0.0,
-                    #   "z": 0.0,
+                    #   "z": None,
                     #   "theta": 0.0,
                     # }, ...
                 # ]

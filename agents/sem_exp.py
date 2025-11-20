@@ -91,6 +91,8 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
         self.collision_n = 0
 
         obs, info = super().reset()
+        self.raw_rgb = obs[:3, :, :]
+        
         obs = self._preprocess_obs(obs)
 
         self.obs_shape = obs.shape

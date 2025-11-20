@@ -6,7 +6,12 @@ scene_datasets/
 versioned_data/
 habitat-lab/
 
-images/
+datasets/images/
+datasets/temp/
+datasets/objectnav/
 
 *.pyc
 *.pth
+*.bak
+
+test.json

@@ -1,6 +1,7 @@
 from collections import deque, defaultdict
 from itertools import count
 import os
+import uuid
 import logging
 import time
 import json
@@ -43,14 +44,15 @@ from constants import category_to_id, hm3d_category, category_to_id_gibson
 
 import envs.utils.pose as pu
 
+
+from utils.translate import ObjectNavTranslate
+from utils.config import get_camera_config
+from utils.save import ImageSaver, DataSaver
+
 os.environ["OMP_NUM_THREADS"] = "1"
 
 
 fileName = 'data/matterport_category_mappings.tsv'
-
-img_dir = "images"
-os.makedirs(img_dir, exist_ok=True)
-
 
 text = ''
 lines = []
@@ -140,10 +142,6 @@ def main():
 
     finished = np.zeros((args.num_processes))
     wait_env = np.zeros((args.num_processes))
-
-    episode_id = np.zeros(args.num_processes, dtype=int)    # episode id for each process
-    final_step_id = np.zeros(args.num_processes, dtype=int) # last episode's final step id for each process
-
 
     g_process_rewards = 0
     g_total_rewards = np.ones((num_scenes))
@@ -328,6 +326,47 @@ def main():
             torch.from_numpy(origins[e]).to(device).float()
 
     init_map_and_pose()
+
+    # ===============================================================
+    # data collection init 
+
+    camera_height, camera_resolution, camera_fov = get_camera_config()
+
+    episode_id = [uuid.uuid4().hex for _ in range(args.num_processes)] # uuid as episode id
+
+    img_dir = "datasets/images"
+    temp_dir = "datasets/temp"
+    data_dir = "datasets/objectnav"
+    os.makedirs(img_dir, exist_ok=True)
+    os.makedirs(temp_dir, exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
+
+    image_saver = ImageSaver(img_dir, temp_dir)
+    data_saver = DataSaver(data_dir)
+    translator = ObjectNavTranslate()
+
+    # save first frame and init data to collect
+    raw_rgbs = envs.get_raw_rgb() 
+
+    goals_en = []
+    goals_zh = []
+
+    pose_data = [[] for _ in range(num_scenes)]
+
+    for e in range(num_scenes):
+        rgb = raw_rgbs[e]
+        image_saver.save_temp_image(rgb, episode_id[e], 0)  
+
+        goal_text = infos[e]['goal_name']
+        goals_en.append(goal_text)
+        goals_zh.append(translator.translate(goal_text))
+
+        x, y, theta = planner_pose_inputs[e, :3]
+        pose_data[e].append([x, y, theta])
+
+    print(f"Nav goals are {goals_en}.")
+    print(f"导航目标是 {goals_zh}.")
+    # ===============================================================
 
 
     def remove_small_points(local_ob_map, image, threshold_point, pose):
@@ -572,7 +611,10 @@ def main():
             p_input['sem_map_pred'] = local_map[e, 4:, :, :
                                                 ].argmax(0).cpu().numpy()
 
-    obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs)
+    obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs) # to init some variables for loop
+
+    # save first episode's second image(step_001) 
+    image_saver.save_temp_image(rgb, episode_id[e], infos[e]['time'])  
 
     start = time.time()
     g_reward = 0
@@ -583,6 +625,7 @@ def main():
 
     for step in range(args.num_training_frames // args.num_processes + 1):
         if finished.sum() == args.num_processes:
+            image_saver.clean_temp_dir()
             break
 
         g_step = (step // args.num_local_steps) % args.num_global_steps
@@ -596,13 +639,24 @@ def main():
 
         for e, x in enumerate(done):
             if x:
+                # ================================================================
+                # Old episode process.
                 spl = infos[e]['spl']
                 success = infos[e]['success']
                 dist = infos[e]['distance_to_goal']
-                spl_per_category[infos[e]['goal_name']].append(spl)
-                success_per_category[infos[e]['goal_name']].append(success)
-                episode_id[e] += 1
-                final_step_id[e] = step  # 记录上个episode的step数
+                # If ues infos[e]['goal_name'] here, the goal will be the next task's goal.
+                spl_per_category[goals_en[e]].append(spl) 
+                success_per_category[goals_en[e]].append(success)
+
+                # process temp image dir
+                if not finished[e]:
+                    if success:
+                        image_saver.save_episode_images(episode_id[e])
+                        for i, p in enumerate(pose_data[e]):
+                            print(i, p)
+                    else:
+                        image_saver.clean_episode_images(episode_id[e])                
+
                 if args.eval:
                     episode_success[e].append(success)
                     episode_spl[e].append(spl)
@@ -610,8 +664,24 @@ def main():
                     if len(episode_success[e]) == num_episodes:
                         finished[e] = 1
    
+                # ================================================================
+                # New episode init.
                 wait_env[e] = 1.
                 init_map_and_pose_for_env(e)
+                
+                episode_id[e] = uuid.uuid4().hex
+                if not finished[e]:
+                    raw_rgbs = envs.get_raw_rgb() 
+                    rgb = raw_rgbs[e]       
+                    image_saver.save_temp_image(rgb, episode_id[e], 0)
+                    pose_data[e] = []   
+                    
+                    goals_en[e] = infos[e]['goal_name']
+                    goals_zh[e] = translator.translate(goals_en[e])
+                    print(f"New nav goal is {goals_en[e]}.")
+                    print(f"新的导航目标是 {goals_zh[e]}.")       
+
+                # ================================================================
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
@@ -902,26 +972,33 @@ def main():
 
         # ------------------------------------------------------------------
 
-        # ------------------------------------------------------------------
-        # Collect and save raw rgb images
-        num_save_steps = 10
-        if step % num_save_steps == 0:
-            raw_rgbs = envs.get_raw_rgb() 
-            # print(rgb.shape) # shape [bs, 3, 720, 960]
-            for e in range(num_scenes):
-                rgb_tensor = raw_rgbs[e]       
-                rgb = rgb_tensor[:3].cpu().numpy()              # [3, H, W]
-                rgb = rgb.transpose(1, 2, 0).astype(np.uint8)   # [H, W, 3]
+        # ===============================================================
+        # Collect and save data (Note: pose_t --> obs_t+1 )
+        raw_rgbs = envs.get_raw_rgb() # Tensor [bs, 3, 720, 960] 
+        for e in range(num_scenes):
+            x, y, theta = planner_inputs[e]['pose_pred'][:3]
+            
+            # save last pose data 
+            # done检查逻辑解释: 输入当前位置, 即交互前如果满足条件则为True; 而非在交互后检查
+            # 因此最后一帧对应的位置信息, 是在done=True这一步的位置
+            if not finished[e] and done: 
+                pose_data[e].append([x, y, theta])
 
-                
-                if episode_id[e] < num_episodes:
-                    # Calculate episode and step index
-                    e_id = num_episodes * e + episode_id[e]
-                    s_id = step - final_step_id[e]
+            # skip step0 due to next scene's init frame will overwrite
+            # time重置逻辑: 如果当前scene结束(done=True), 则time会是0, 且obs为下一scene的初始obs
+            if not finished[e] and infos[e]['time']:
+                rgb = raw_rgbs[e]
+                image_saver.save_temp_image(rgb, episode_id[e], infos[e]['time'])
 
-                    img_name = f"{img_dir}/{(e_id):03}_000_{s_id:03}.jpg"
-                    print(f"Saving image: {img_name}")
-                    cv2.imwrite(img_name, rgb[:, :, ::-1])
+                pose_data[e].append([x, y, theta])
+
+                if step % args.log_interval == 0:
+                    print(f"Current episode_id: {episode_id[e]}, timestep: {infos[e]['time']}, .")
+                    # print(f"Nav goal is {goals_en[e]}.")
+                    # print(f"导航目标是 {goals_zh[e]}.")
+                    pass
+
+        # ===============================================================
 
         # ------------------------------------------------------------------
 
@@ -1022,11 +1099,12 @@ def main():
         # Save the spl per category
         log = "Success | SPL per category\n"
         for key in success_per_category:
-            log += "{}: {} | {}\n".format(key,
+            log += "{}: {} | {}, ({})\n".format(key,
                                           sum(success_per_category[key]) /
                                           len(success_per_category[key]),
                                           sum(spl_per_category[key]) /
-                                          len(spl_per_category[key]))
+                                          len(spl_per_category[key]),
+                                          len(success_per_category[key]))
 
         print(log)
         logging.info(log)
