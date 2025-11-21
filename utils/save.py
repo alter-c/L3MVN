@@ -108,7 +108,7 @@ class DataSaver():
 
         # theta transform
         theta_local = np.deg2rad(theta_t - theta)
-        theta_local = theta_local if theta_local > 0 else theta_local + 2 * np.pi
+        theta_local = theta_local if theta_local >= 0 else theta_local + 2 * np.pi
         
         return x_local, y_local, theta_local
 

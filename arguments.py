@@ -33,6 +33,12 @@ def get_args():
     parser.add_argument("--sem_gpu_id", type=int, default=-1,
                         help="""gpu id for semantic model,
                                 -1: same as sim gpu, -2: cpu""")
+    
+    # Scene slicing for different params data collection
+    parser.add_argument("--scene_slice_total", type=int, default=1,
+                        help="Total number of scene slices")
+    parser.add_argument("--scene_slice_index", type=int, default=0,
+                        help="Which slice index to use (0-based)")
 
     # Logging, loading models, visualization
     parser.add_argument('--log_interval', type=int, default=10,

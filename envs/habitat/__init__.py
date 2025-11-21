@@ -174,6 +174,23 @@ def construct_envs21(args):
     if "*" in basic_config.DATASET.CONTENT_SCENES:
         scenes = dataset.get_scenes_to_load(basic_config.DATASET)
 
+    # ===============================================================
+    # Scene slicing for specific param data collection
+    total = args.scene_slice_total
+    index = args.scene_slice_index
+
+    if total > 1:
+        length = len(scenes)
+        slice_size = length // total
+        start = index * slice_size
+        end = (index + 1) * slice_size if index < total - 1 else length
+        scenes = scenes[start:end]
+
+        print(f"[SCENE SLICE] total={total}, index={index}, "
+              f"using scenes[{start}:{end}] (count={len(scenes)})")
+
+    # ===============================================================
+
     if len(scenes) > 0:
         assert len(scenes) >= args.num_processes, (
             "reduce the number of processes as there "
