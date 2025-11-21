@@ -303,7 +303,7 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
 
         if replan:
             self.replan_count += 1
-            print("false: ", self.replan_count)
+            # print("false: ", self.replan_count)
         else:
             self.replan_count = 0
 
@@ -329,13 +329,16 @@ class Sem_Exp_Env_Agent(ObjectGoal_Env21):
             if eve_start_y > map_pred.shape[0]: eve_start_y = map_pred.shape[0] 
             if eve_start_x < 0: eve_start_x = 0 
             if eve_start_y < 0: eve_start_y = 0 
-            if exp_pred[eve_start_x, eve_start_y] == 0 and self.eve_angle > -60:
-                action = 5
-                self.eve_angle -= 30
-            elif exp_pred[eve_start_x, eve_start_y] == 1 and self.eve_angle < 0:
-                action = 4
-                self.eve_angle += 30
-            elif relative_angle > self.args.turn_angle / 2.:
+            # if exp_pred[eve_start_x, eve_start_y] == 0 and self.eve_angle > -60:
+            #     action = 5
+            #     self.eve_angle -= 30
+            # elif exp_pred[eve_start_x, eve_start_y] == 1 and self.eve_angle < 0:
+            #     action = 4
+            #     self.eve_angle += 30
+            # elif relative_angle > self.args.turn_angle / 2.:
+            
+            # for data collection, do not use look up or down
+            if relative_angle > self.args.turn_angle / 2.:
                 action = 3  # Right
             elif relative_angle < -self.args.turn_angle / 2.:
                 action = 2  # Left
