@@ -99,22 +99,6 @@ def main():
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
-    # Setup Logging
-    log_dir = "{}/models/{}/".format(args.dump_location, args.exp_name)
-    dump_dir = "{}/dump/{}/".format(args.dump_location, args.exp_name)
-
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    if not os.path.exists(dump_dir):
-        os.makedirs(dump_dir)
-
-    logging.basicConfig(
-        filename=log_dir + 'train.log',
-        level=logging.INFO)
-    print("Dumping at {}".format(log_dir))
-    print(args)
-    logging.info(args)
-
     # Logging and loss variables
     num_scenes = args.num_processes
     num_episodes = int(args.num_eval_episodes)
@@ -328,30 +312,38 @@ def main():
     init_map_and_pose()
 
     # ===============================================================
+    # setup logging
+    camera_config = get_camera_config(args)
+    log_dir = "{}/models/{}/".format(args.dump_location, args.exp_name)
+    dump_dir = "{}/dump/{}/".format(args.dump_location, args.exp_name)
+
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    if not os.path.exists(dump_dir):
+        os.makedirs(dump_dir)
+
+    log_file = "eval_h_{}_fov_{}.log".format(camera_config["height"], camera_config["fov"])
+    logging.basicConfig(
+        filename=log_dir + log_file,
+        level=logging.INFO)
+    print("Dumping at {}".format(log_dir))
+    print(args)
+    logging.info(args)
+
     # data collection init 
-
-    camera_height, camera_resolution, camera_fov = get_camera_config()
-
     episode_id = [uuid.uuid4().hex for _ in range(args.num_processes)] # uuid as episode id
 
     img_dir = "datasets/images"
     temp_dir = "datasets/temp"
     data_dir = "datasets/objectnav"
-    os.makedirs(img_dir, exist_ok=True)
-    os.makedirs(temp_dir, exist_ok=True)
-    os.makedirs(data_dir, exist_ok=True)
 
     image_saver = ImageSaver(img_dir, temp_dir)
-    data_saver = DataSaver(data_dir)
-    translator = ObjectNavTranslate()
+    data_saver = DataSaver(data_dir, camera_config)
 
     # save first frame and init data to collect
     raw_rgbs = envs.get_raw_rgb() 
-
     goals_en = []
-    goals_zh = []
-
-    pose_data = [[] for _ in range(num_scenes)]
+    trajectory_data = [[] for _ in range(num_scenes)]
 
     for e in range(num_scenes):
         rgb = raw_rgbs[e]
@@ -359,13 +351,11 @@ def main():
 
         goal_text = infos[e]['goal_name']
         goals_en.append(goal_text)
-        goals_zh.append(translator.translate(goal_text))
 
         x, y, theta = planner_pose_inputs[e, :3]
-        pose_data[e].append([x, y, theta])
+        trajectory_data[e].append([x, y, theta])
 
     print(f"Nav goals are {goals_en}.")
-    print(f"导航目标是 {goals_zh}.")
     # ===============================================================
 
 
@@ -643,24 +633,27 @@ def main():
                 # Old episode process.
                 spl = infos[e]['spl']
                 success = infos[e]['success']
-                dist = infos[e]['distance_to_goal']
-                # If ues infos[e]['goal_name'] here, the goal will be the next task's goal.
-                spl_per_category[goals_en[e]].append(spl) 
-                success_per_category[goals_en[e]].append(success)
+                dist = infos[e]['distance_to_goal']                               
 
-                # process temp image dir
+                # process temp image dir and json data
                 if not finished[e]:
                     if success:
                         image_saver.save_episode_images(episode_id[e])
-                        for i, p in enumerate(pose_data[e]):
-                            print(i, p)
+                        # If ues infos[e]['goal_name'] here, the goal will be the next task's goal.
+                        data_saver.save_episode_data(episode_id[e],
+                                                     goals_en[e],
+                                                     trajectory_data[e])
                     else:
                         image_saver.clean_episode_images(episode_id[e])                
 
                 if args.eval:
                     episode_success[e].append(success)
-                    episode_spl[e].append(spl)
-                    episode_dist[e].append(dist)
+                    success_per_category[goals_en[e]].append(success)
+                    # only compute spl for success case
+                    if success: 
+                        episode_spl[e].append(spl)
+                        episode_dist[e].append(dist)
+                        spl_per_category[goals_en[e]].append(spl) 
                     if len(episode_success[e]) == num_episodes:
                         finished[e] = 1
    
@@ -674,14 +667,14 @@ def main():
                     raw_rgbs = envs.get_raw_rgb() 
                     rgb = raw_rgbs[e]       
                     image_saver.save_temp_image(rgb, episode_id[e], 0)
-                    pose_data[e] = []   
                     
                     goals_en[e] = infos[e]['goal_name']
-                    goals_zh[e] = translator.translate(goals_en[e])
-                    print(f"New nav goal is {goals_en[e]}.")
-                    print(f"新的导航目标是 {goals_zh[e]}.")       
+                    print(f"New nav goal is {goals_en[e]}.")    
+
+                    trajectory_data[e] = []   
 
                 # ================================================================
+
         # ------------------------------------------------------------------
 
         # ------------------------------------------------------------------
@@ -976,27 +969,30 @@ def main():
         # Collect and save data (Note: pose_t --> obs_t+1 )
         raw_rgbs = envs.get_raw_rgb() # Tensor [bs, 3, 720, 960] 
         for e in range(num_scenes):
+            """
+            1. done检查逻辑: 输入当前位置, 即交互前如果满足条件则为True; 而非在交互后检查
+                因此最后一帧对应的位置信息, 是在done==True这一步的位置
+
+            2. time重置逻辑: 如果当前scene结束(done==True), 则time=0, 且obs为下一scene的初始obs
+                且下一scene的真正step0时done==False, 因此两个判断逻辑不能完全合并
+            """
+            if finished[e]:
+                continue
+
             x, y, theta = planner_inputs[e]['pose_pred'][:3]
             
             # save last pose data 
-            # done检查逻辑解释: 输入当前位置, 即交互前如果满足条件则为True; 而非在交互后检查
-            # 因此最后一帧对应的位置信息, 是在done=True这一步的位置
-            if not finished[e] and done: 
-                pose_data[e].append([x, y, theta])
+            if done[e]: 
+                trajectory_data[e].append([x, y, theta])
 
             # skip step0 due to next scene's init frame will overwrite
-            # time重置逻辑: 如果当前scene结束(done=True), 则time会是0, 且obs为下一scene的初始obs
-            if not finished[e] and infos[e]['time']:
+            if infos[e]['time']:
                 rgb = raw_rgbs[e]
                 image_saver.save_temp_image(rgb, episode_id[e], infos[e]['time'])
-
-                pose_data[e].append([x, y, theta])
+                trajectory_data[e].append([x, y, theta])
 
                 if step % args.log_interval == 0:
-                    print(f"Current episode_id: {episode_id[e]}, timestep: {infos[e]['time']}, .")
-                    # print(f"Nav goal is {goals_en[e]}.")
-                    # print(f"导航目标是 {goals_zh[e]}.")
-                    pass
+                    print(f"Current process: {e}, episode_id: {episode_id[e]}, step: {infos[e]['time']}.")
 
         # ===============================================================
 
@@ -1022,12 +1018,13 @@ def main():
             log += "\n\tLLM use rate: " + str(g_sum_rewards /g_sum_global)
 
             if args.eval:
-                total_success = []
+                # Note: here we only calculate spl and dist for success case
+                total_done = []
                 total_spl = []
                 total_dist = []
                 for e in range(args.num_processes):
                     for acc in episode_success[e]:
-                        total_success.append(acc)
+                        total_done.append(acc)
                     for dist in episode_dist[e]:
                         total_dist.append(dist)
                     for spl in episode_spl[e]:
@@ -1036,10 +1033,10 @@ def main():
                 if len(total_spl) > 0:
                     log += " ObjectNav succ/spl/dtg:"
                     log += " {:.3f}/{:.3f}/{:.3f}({:.0f}),".format(
-                        np.mean(total_success),
+                        np.mean(total_done),
                         np.mean(total_spl),
                         np.mean(total_dist),
-                        len(total_spl))
+                        len(total_done))
 
                 total_collision = []
                 total_exploration = []
@@ -1051,15 +1048,22 @@ def main():
                     total_detection.append(fail_case[e]['detection'])
                     total_success.append(fail_case[e]['success'])
 
-                if len(total_spl) > 0:
+                if len(total_done) > 0:
                     log += " Fail Case: collision/exploration/detection/success:"
                     log += " {:.0f}/{:.0f}/{:.0f}/{:.0f}({:.0f}),".format(
                         np.sum(total_collision),
                         np.sum(total_exploration),
                         np.sum(total_detection),
                         np.sum(total_success),
-                        len(total_spl))
-
+                        len(total_done))
+                
+                if len(success_per_category) > 0:
+                    log += "\n\tSuccess per category: "
+                    for key in success_per_category:
+                        log += "{}: {} ({}), ".format(key,
+                                                    sum(success_per_category[key]) /
+                                                    len(success_per_category[key]),
+                                                    len(success_per_category[key]))
 
             print(log)
             logging.info(log)
@@ -1091,7 +1095,7 @@ def main():
                 np.mean(total_success),
                 np.mean(total_spl),
                 np.mean(total_dist),
-                len(total_spl))
+                len(total_success))
 
         print(log)
         logging.info(log)
@@ -1099,11 +1103,14 @@ def main():
         # Save the spl per category
         log = "Success | SPL per category\n"
         for key in success_per_category:
+            if len(spl_per_category[key]) > 0:
+                avg_spl = sum(spl_per_category[key]) / len(spl_per_category[key])
+            else:
+                avg_spl = 0.0
             log += "{}: {} | {}, ({})\n".format(key,
                                           sum(success_per_category[key]) /
                                           len(success_per_category[key]),
-                                          sum(spl_per_category[key]) /
-                                          len(spl_per_category[key]),
+                                          avg_spl,
                                           len(success_per_category[key]))
 
         print(log)

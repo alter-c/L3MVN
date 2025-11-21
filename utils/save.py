@@ -1,7 +1,13 @@
 import cv2
 import os
 import shutil
+import json
+import math
+import time
 import numpy as np
+from utils.translate import ObjectNavTranslate
+
+
 
 class ImageSaver():
     def __init__(self, 
@@ -9,6 +15,8 @@ class ImageSaver():
                  temp_dir):
         self.save_dir = save_dir
         self.temp_dir = temp_dir
+        os.makedirs(save_dir, exist_ok=True)
+        os.makedirs(temp_dir, exist_ok=True)
 
     def _preprocess_image(self, image_tensor):      
         """Preprocess habitat image tensor for saving."""
@@ -47,7 +55,135 @@ class ImageSaver():
 
 class DataSaver():
     def __init__(self, 
-                 data_dir):
-        pass
+                 data_dir,
+                 camera_config):
+        
+        self.data_dir = data_dir
+        os.makedirs(self.data_dir, exist_ok=True)
+
+        self.height = camera_config["height"]
+        self.resolution = camera_config["resolution"]
+        self.fov = camera_config["fov"]
+
+        self.task_type = "object_nav"
+        self.scene_type = "indoor"
+        self.embodiment_type = "wheeled"
+
+        self.predicate_steps = 8
+
+        self.translator = ObjectNavTranslate()
+
+    def _visual_input(self, episode_id, step, azimuth=0):
+        image_dir = f"images/{episode_id}"
+        return [
+            f"{image_dir}/{episode_id}_{azimuth:03}_{s:03}.jpg" \
+                for s in range(step + 1)
+        ]
+
+    def _text_input(self, goal_text_en):
+        goal_text_zh = self.translator.translate(goal_text_en)
+
+        article = "an" if goal_text_en[0].lower() in "aeiou" else "a"
+        text_input_en = f"Search for {article} {goal_text_en}."
+        text_input_zh = f"搜寻{goal_text_zh}。"
+
+        return {
+            "en": text_input_en,
+            "zh": text_input_zh
+        }
+    
+    def _pose_trans(self, current_pose, target_pose):
+        x, y, theta = current_pose
+        x_t, y_t, theta_t = target_pose
+
+        c = np.cos(np.deg2rad(theta))
+        s = np.sin(np.deg2rad(theta))
+        M = np.array([[c, s],
+                      [s, -c]])
+        dx = x_t - x
+        dy = y_t - y
+
+        # coordinate transform
+        x_local, y_local = M @ np.array([dx, dy])
+
+        # theta transform
+        theta_local = np.deg2rad(theta_t - theta)
+        theta_local = theta_local if theta_local > 0 else theta_local + 2 * np.pi
+        
+        return x_local, y_local, theta_local
+
+    def _compute_local_trajectory(self, step, trajectory_data, predicate_steps):
+        local_trajectory = []
+        if step == len(trajectory_data)-1:
+            local_trajectory.append({"x": 0.0, "y": 0.0, "z": None, "theta": 0.0})
+        else:
+            current_pose = trajectory_data[step]
+            for target_pose in trajectory_data[step+1: step+1+predicate_steps]:
+                x_local, y_local, theta_local = self._pose_trans(current_pose, target_pose)
+                local_trajectory.append({"x": x_local, "y": y_local, "z": None, "theta": theta_local})
+        return local_trajectory
+
+
+    def create_step_data(self, episode_id, step, goal_text, trajectory_data, predicate_steps):
+        sample_id = f"{episode_id}_{step:03}"
+        local_trajectory = self._compute_local_trajectory(step, trajectory_data, predicate_steps)
+
+        data = {
+            "episode_id": episode_id,
+            "step": step,
+            "sample_id": sample_id,
+            "task_type": self.task_type,   
+            "metadata": {
+                "collection_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "scene_type": self.scene_type,
+            },
+
+            "embodiment":{
+                "type": self.embodiment_type,
+                "params": {
+                    "max_speed": 1.0,
+                    "camera_height": self.height,
+                    "camera": {
+                        "front": {
+                            "azimuth": 0,
+                            "resolution": self.resolution,
+                            "fov": self.fov,
+                        }
+                    },
+                }
+            },
+
+            "visual_input": {
+                "front": self._visual_input(episode_id, step, azimuth=0),
+            },   
+
+            "text_input": self._text_input(goal_text),
+
+            "label": {
+                "trajectory": local_trajectory, 
+                "answer": None
+            }
+        }
+
+        return data
+    
+
+    def save_episode_data(self, episode_id, goal_text, trajectory_data):
+        episode_data = []
+        for step in range(len(trajectory_data)):
+            step_data = self.create_step_data(
+                episode_id,
+                step,
+                goal_text,
+                trajectory_data,
+                self.predicate_steps
+            )
+            episode_data.append(step_data)
+
+        filepath = os.path.join(self.data_dir, f"{episode_id}.json")
+        with open(filepath, "w") as f:
+            json.dump(episode_data, f, ensure_ascii=False, indent=2)
+
+        print(f"Saved episode data to {episode_id}.json")
 
 
