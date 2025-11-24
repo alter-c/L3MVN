@@ -640,9 +640,20 @@ def main():
                     if success:
                         image_saver.save_episode_images(episode_id[e])
                         # If ues infos[e]['goal_name'] here, the goal will be the next task's goal.
+                        extra_data = {
+                            'spl': spl,
+                        }
                         data_saver.save_episode_data(episode_id[e],
                                                      goals_en[e],
-                                                     trajectory_data[e])
+                                                     trajectory_data[e],
+                                                     extra_data)
+                        
+                        log = f"Saved episode {episode_id[e]}. "
+                        log += f"Goal: {goals_en[e]}, SPL: {spl:.3f}"
+
+                        print(log)
+                        logging.info(log)
+
                     else:
                         image_saver.clean_episode_images(episode_id[e])                
 

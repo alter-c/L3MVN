@@ -9,6 +9,9 @@ habitat-lab/
 datasets/images/
 datasets/temp/
 datasets/objectnav/
+datasets/result/
+
+datasets_backup/
 
 *.pyc
 *.pth

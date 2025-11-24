@@ -19,7 +19,7 @@ for h in "${HEIGHTS[@]}"; do
             --load pretrained_models/llm_model.pt \
             --use_gtsem 0 \
             --num_local_steps 10 \
-            -n 4 \
+            -n 5 \
             --num_eval_episodes 100 \
             --camera_height "$h" \
             --hfov "$f" \

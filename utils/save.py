@@ -8,7 +8,6 @@ import numpy as np
 from utils.translate import ObjectNavTranslate
 
 
-
 class ImageSaver():
     def __init__(self, 
                  save_dir,
@@ -124,7 +123,7 @@ class DataSaver():
         return local_trajectory
 
 
-    def create_step_data(self, episode_id, step, goal_text, trajectory_data, predicate_steps):
+    def create_step_data(self, episode_id, step, goal_text, trajectory_data, predicate_steps, extra_data=None):
         sample_id = f"{episode_id}_{step:03}"
         local_trajectory = self._compute_local_trajectory(step, trajectory_data, predicate_steps)
 
@@ -162,13 +161,15 @@ class DataSaver():
             "label": {
                 "trajectory": local_trajectory, 
                 "answer": None
-            }
+            },
+            
+            "extra": extra_data if extra_data is not None else {},
         }
 
         return data
     
 
-    def save_episode_data(self, episode_id, goal_text, trajectory_data):
+    def save_episode_data(self, episode_id, goal_text, trajectory_data, extra_data=None):
         episode_data = []
         for step in range(len(trajectory_data)):
             step_data = self.create_step_data(
@@ -176,7 +177,8 @@ class DataSaver():
                 step,
                 goal_text,
                 trajectory_data,
-                self.predicate_steps
+                self.predicate_steps,
+                extra_data
             )
             episode_data.append(step_data)
 
