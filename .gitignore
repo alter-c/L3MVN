@@ -16,5 +16,6 @@ datasets_backup/
 *.pyc
 *.pth
 *.bak
+*.tar.gz
 
 test.json
