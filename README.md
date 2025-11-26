@@ -20,7 +20,7 @@ Visual target navigation in unknown environments is a crucial problem in robotic
 
 ## Installation
 
-The code has been tested with Python 3.7 on Ubuntu 22.04 with Nvidia 3090.
+The code has been tested with Python 3.7 on Ubuntu 22.04 with single Nvidia 3090.
 #### 1. Prepare Environment
 - Install this repo and create conda environment:
     ```
@@ -138,7 +138,20 @@ The code has been tested with Python 3.7 on Ubuntu 22.04 with Nvidia 3090.
 - For evaluating the pre-trained model:
   ```
   python main_llm_vis.py --split val --eval 1 --auto_gpu_config 0 \
-  -n 1 --num_eval_episodes 10 --load pretrained_models/llm_model.pt \
+  -n 1 --num_eval_episodes 2 --load pretrained_models/llm_model.pt \
   --use_gtsem 0 --num_local_steps 10
   ```
 
+## Collection
+- We collect objectnav data with different camera settings: height and field of view (FOV). You can modify the data collection params in `collect.sh`. 
+  ```
+  bash collect.sh
+  ```
+- Tips: 
+  - If you want to make more detailed adjustments to the collection pipeline, we recommend adjusting `arguments.py` and `main_llm_vis.py`. 
+  - The core data collection code is wrapped for easy review and quick edits:
+    ```
+    # ==============
+    data collect code...
+    # ==============
+    ```
