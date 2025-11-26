@@ -333,12 +333,13 @@ def main():
     # data collection init 
     episode_id = [uuid.uuid4().hex for _ in range(args.num_processes)] # uuid as episode id
 
-    img_dir = "datasets/images"
-    temp_dir = "datasets/temp"
-    data_dir = "datasets/objectnav"
+    base_dir = "datasets"
+    img_dir = "images"
+    data_dir = "objectnav"
+    temp_dir = "temp"
 
-    image_saver = ImageSaver(img_dir, temp_dir)
-    data_saver = DataSaver(data_dir, camera_config)
+    image_saver = ImageSaver(base_dir, img_dir, temp_dir)
+    data_saver = DataSaver(base_dir, data_dir, camera_config)
 
     # save first frame and init data to collect
     raw_rgbs = envs.get_raw_rgb() 
@@ -674,6 +675,12 @@ def main():
                 init_map_and_pose_for_env(e)
                 
                 episode_id[e] = uuid.uuid4().hex
+                
+                # Update part dir if steps exceed 100k
+                if image_saver.count_step() >= 100000:
+                    image_saver.update_part_dir()
+                    data_saver.update_part_dir()
+
                 if not finished[e]:
                     raw_rgbs = envs.get_raw_rgb() 
                     rgb = raw_rgbs[e]       

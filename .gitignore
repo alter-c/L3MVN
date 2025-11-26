@@ -6,9 +6,10 @@ scene_datasets/
 versioned_data/
 habitat-lab/
 
-datasets/images/
+datasets/images_*/
+datasets/objectnav_*/
+datasets/part*/
 datasets/temp/
-datasets/objectnav/
 datasets/result/
 
 datasets_backup/

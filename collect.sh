@@ -3,14 +3,14 @@
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate l3mvn
 
-HEIGHTS=(1.0 1.2 1.4)
-FOVS=(75 90 105 120)
+HEIGHTS=(0.75 1.0 1.25 1.5)
+FOVS=(80 95 110 125)
 
 total_scenes=80 # train scenes
 slices=$(( ${#HEIGHTS[@]} * ${#FOVS[@]} ))
 n=$(( total_scenes / slices ))
 
-# max processes on single 3090
+# max processes on single 3090/4090
 if [ "$n" -gt 6 ]; then
     n=6
 elif [ "$n" -lt 1 ]; then
@@ -34,7 +34,7 @@ for h in "${HEIGHTS[@]}"; do
             --use_gtsem 0 \
             --num_local_steps 10 \
             -n $n \
-            --num_eval_episodes 100 \
+            --num_eval_episodes 50 \
             --camera_height "$h" \
             --hfov "$f" \
             --scene_slice_total $slices \

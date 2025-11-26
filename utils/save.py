@@ -5,23 +5,43 @@ import json
 import math
 import time
 import numpy as np
+from pathlib import Path
 from utils.translate import ObjectNavTranslate
 
 
 class ImageSaver():
     def __init__(self, 
+                 base_dir,
                  save_dir,
                  temp_dir):
+        self.part_index = 0
+        self.base_dir = base_dir
         self.save_dir = save_dir
-        self.temp_dir = temp_dir
-        os.makedirs(save_dir, exist_ok=True)
-        os.makedirs(temp_dir, exist_ok=True)
+
+        self.part_dir = os.path.join(self.base_dir, f"part{self.part_index}", self.save_dir)
+        self.temp_dir = os.path.join(base_dir, temp_dir)
+        os.makedirs(self.part_dir, exist_ok=True)
+        os.makedirs(self.temp_dir, exist_ok=True)
 
     def _preprocess_image(self, image_tensor):      
         """Preprocess habitat image tensor for saving."""
         image = image_tensor[:3].cpu().numpy()              # [3, H, W]
         image = image.transpose(1, 2, 0).astype(np.uint8)   # [H, W, 3]
         return image[:, :, ::-1]    # BGR for cv2
+
+    def count_step(self):
+        total = 0
+        for ep_dir in Path(self.part_dir).iterdir():
+            if ep_dir.is_dir():
+                total += len(list(ep_dir.iterdir()))
+        return total
+
+    def update_part_dir(self):
+        self.part_index += 1
+        new_part_dir = os.path.join(self.base_dir, f"part{self.part_index}", self.save_dir)
+        os.makedirs(new_part_dir, exist_ok=True)
+        self.part_dir = new_part_dir
+        print(f"Updated save directory to {self.part_dir}")
 
     def save_temp_image(self, image, episode_id, step, azimuth=0):
         sub_dir = os.path.join(self.temp_dir, f"{episode_id}")
@@ -35,7 +55,7 @@ class ImageSaver():
 
     def save_episode_images(self, episode_id):
         tmp_episode_dir = os.path.join(self.temp_dir, episode_id)
-        suc_episode_dir = os.path.join(self.save_dir, episode_id)
+        suc_episode_dir = os.path.join(self.part_dir, episode_id)
         shutil.move(tmp_episode_dir, suc_episode_dir)
         print(f"Saved episode images to {suc_episode_dir}")
 
@@ -54,11 +74,15 @@ class ImageSaver():
 
 class DataSaver():
     def __init__(self, 
+                 base_dir,
                  data_dir,
                  camera_config):
-        
+        self.base_dir = base_dir
         self.data_dir = data_dir
-        os.makedirs(self.data_dir, exist_ok=True)
+        
+        self.part_index = 0
+        self.part_dir = os.path.join(self.base_dir, f"part{self.part_index}", self.data_dir)
+        os.makedirs(self.part_dir, exist_ok=True)
 
         self.height = camera_config["height"]
         self.resolution = camera_config["resolution"]
@@ -71,6 +95,12 @@ class DataSaver():
         self.predicate_steps = 8
 
         self.translator = ObjectNavTranslate()
+
+    def update_part_dir(self):
+        self.part_index += 1
+        new_part_dir = os.path.join(self.base_dir, f"part{self.part_index}", self.data_dir)
+        os.makedirs(new_part_dir, exist_ok=True)
+        self.part_dir = new_part_dir
 
     def _visual_input(self, episode_id, step, azimuth=0):
         image_dir = f"images/{episode_id}"
@@ -182,7 +212,7 @@ class DataSaver():
             )
             episode_data.append(step_data)
 
-        filepath = os.path.join(self.data_dir, f"{episode_id}.json")
+        filepath = os.path.join(self.part_dir, f"{episode_id}.json")
         with open(filepath, "w") as f:
             json.dump(episode_data, f, ensure_ascii=False, indent=2)
 
