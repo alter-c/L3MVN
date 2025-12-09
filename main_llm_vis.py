@@ -604,7 +604,8 @@ def main():
     obs, _, done, infos = envs.plan_act_and_preprocess(planner_inputs) # to init some variables for loop
 
     # save first episode's second image(step_001) 
-    image_saver.save_temp_image(rgb, episode_id[e], infos[e]['time'])  
+    # image_saver.save_temp_image(rgb, episode_id[e], infos[e]['time'])  
+    image_saver.save_temp_image(rgb, episode_id[e], 1)  # sometimes, here's infos[e]['time'] is 0???
 
     start = time.time()
     g_reward = 0
